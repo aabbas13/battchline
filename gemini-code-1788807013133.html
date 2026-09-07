@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Batchline — Mobile Pharmacy Stock Intake</title>
+<style>
+  :root{
+    --paper:#F6F7F4;
+    --ink:#17262A;
+    --ink-soft:#4B5D60;
+    --line:#D8DED9;
+    --surface:#FFFFFF;
+    --teal:#0F6E5E;
+    --teal-deep:#0B4F44;
+    --amber:#C4622D;
+    --amber-soft:#F4E3D3;
+    --good:#2E7D46;
+    --bad:#B3392C;
+    --mono: 'IBM Plex Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box; touch-action: manipulation;}
+  html,body{margin:0;padding:0;width:100%;min-height:100vh;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.4;}
+
+  header.top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; border-bottom:1px solid var(--line); background:var(--surface); flex-wrap:wrap; gap:10px;
+  }
+  header.top h1{font-size:18px; margin:0; font-weight:700;}
+  header.top .tag{font-size:11px; color:var(--ink-soft); display:block;}
+  header.top .stats{display:flex; gap:16px; font-size:12px; color:var(--ink-soft);}
+  header.top .stats b{color:var(--ink); font-family:var(--mono); font-size:14px; display:block;}
+
+  main{display:flex; flex-direction:column; gap:0;}
+  @media (min-width: 900px){
+    main{display:grid; grid-template-columns: 420px 1fr;}
+  }
+
+  .panel{padding:16px;}
+  .panel.left{border-bottom:1px solid var(--line);}
+  @media (min-width: 900px){ .panel.left{border-bottom:none; border-right:1px solid var(--line); position:sticky; top:0;} }
+
+  .tabs{display:flex; gap:6px; background:var(--line); border-radius:10px; padding:4px; margin-bottom:14px;}
+  .tabs button{
+    flex:1; border:none; background:transparent; padding:12px 8px; min-height:48px;
+    font-size:15px; font-weight:600; color:var(--ink-soft); border-radius:8px; cursor:pointer;
+  }
+  .tabs button.active{background:var(--surface); color:var(--teal-deep); box-shadow:0 1px 3px rgba(0,0,0,.1);}
+
+  .tabpane{display:none;}
+  .tabpane.active{display:block;}
+
+  .camera-wrap{
+    position:relative; background:#000; border-radius:12px; overflow:hidden;
+    width:100%; max-height:40vh; aspect-ratio:4/3; display:flex; align-items:center; justify-content:center;
+  }
+  video{width:100%; height:100%; object-fit:cover; display:block;}
+
+  .scan-reticle{position:absolute; inset:0; pointer-events:none;}
+  .scan-reticle.live::after{
+    content:""; position:absolute; left:15%; right:15%; top:20%; bottom:20%;
+    border:2px solid var(--amber); border-radius:10px; box-shadow:0 0 0 999px rgba(0,0,0,0.45);
+  }
+
+  select, input[type=text], input[type=number], textarea{
+    font-size:16px !important; padding:12px; min-height:48px; border:1px solid var(--line);
+    border-radius:8px; background:var(--surface); color:var(--ink); width:100%; box-sizing:border-box;
+  }
+  textarea{resize:vertical; font-family:var(--mono); font-size:13px !important; min-height:100px;}
+
+  button, .btn-upload{
+    font-size:15px; font-weight:600; border-radius:8px; border:1px solid var(--line);
+    background:var(--surface); color:var(--ink); padding:12px 16px; min-height:48px;
+    display:inline-flex; align-items:center; justify-content:center; cursor:pointer; text-align:center;
+  }
+  button.primary{background:var(--teal); border-color:var(--teal); color:#fff;}
+  button.ghost{background:transparent; border-color:transparent; color:var(--ink-soft);}
+  button.danger{color:var(--bad); border-color:#EAD1CC;}
+  button.small{min-height:38px; padding:6px 12px; font-size:13px;}
+  button:disabled{opacity:.45; cursor:not-allowed;}
+
+  .upload-card{
+    margin-top:12px; padding:12px; background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; display:flex; flex-direction:column; gap:10px;
+  }
+  .file-input-hidden{display:none;}
+  .file-preview-thumb{max-height:120px; object-fit:contain; border-radius:6px; display:none; margin-top:6px;}
+
+  .status-line{margin-top:10px; font-size:13px; font-weight:500; color:var(--ink-soft); word-break:break-word;}
+  .status-line.ok{color:var(--good);}
+  .status-line.err{color:var(--bad);}
+
+  .decoded-box{margin-top:12px; border:1px solid var(--line); border-radius:10px; padding:12px; background:var(--surface);}
+  .decoded-box h4{margin:0 0 6px; font-size:11px; text-transform:uppercase; color:var(--ink-soft); font-weight:700;}
+  .decoded-box .raw{font-family:var(--mono); font-size:12px; word-break:break-all; background:var(--paper); padding:10px; border-radius:6px;}
+  
+  .parsed-grid{
+    display:grid; grid-template-columns: auto 1fr; gap:4px 12px; font-size:13px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);
+  }
+  .parsed-grid .lbl{color:var(--ink-soft); font-weight:600;}
+  .parsed-grid .val{font-family:var(--mono); font-weight:500;}
+
+  .field-assign-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;}
+
+  h3.section-title{font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:20px 0 10px; font-weight:700;}
+  h3.section-title:first-child{margin-top:0;}
+
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 12px;}
+  @media (max-width: 500px){ .form-grid{grid-template-columns:1fr;} }
+  .field label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:4px; font-weight:600;}
+
+  .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:8px; margin-top:8px; max-height:60vh;}
+  table{width:100%; border-collapse:collapse; font-size:13px; background:var(--surface);}
+  th, td{padding:10px 12px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap;}
+  thead th{position:sticky; top:0; background:var(--surface); z-index:2; color:var(--ink-soft); font-size:11px; text-transform:uppercase;}
+
+  .expiry-flag{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle;}
+  .expiry-flag.soon{background:var(--amber);}
+  .expiry-flag.expired{background:var(--bad);}
+  .expiry-flag.ok{background:var(--good);}
+
+  .helptext{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+  .count-pill{font-family:var(--mono); font-size:12px; background:var(--amber-soft); color:var(--amber); padding:4px 10px; border-radius:999px; font-weight:600;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Batchline</h1>
+    <span class="tag">Mobile Pharmacy Intake — Live DataMatrix & Master Sync</span>
+  </div>
+  <div class="stats">
+    <div>Items<b id="statCount">0</b></div>
+    <div>Last capture<b id="statLast">—</b></div>
+  </div>
+</header>
+
+<main>
+  <section class="panel left">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="scan">Live Camera</button>
+      <button class="tab-btn" data-tab="ocr">OCR Text</button>
+    </div>
+
+    <!-- TAB 1: BARCODE SCANNER -->
+    <div class="tabpane active" id="tab-scan">
+      <div class="camera-wrap">
+        <video id="scanVideo" playsinline autoplay muted></video>
+        <div class="scan-reticle" id="scanReticle"></div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <select id="scanCameraSelect" style="flex:1;"></select>
+        <button id="scanStartBtn" class="primary" style="flex:1;">Start Camera</button>
+        <button id="scanStopBtn" disabled style="width:80px;">Stop</button>
+      </div>
+
+      <!-- FILE UPLOAD FALLBACK -->
+      <div class="upload-card">
+        <span style="font-size:12px; font-weight:600; color:var(--ink-soft);">Or process high-res picture:</span>
+        <input type="file" id="scanFileInput" class="file-input-hidden" accept="image/*" capture="environment">
+        
+        <div style="display:flex; gap:8px;">
+          <label for="scanFileInput" class="btn-upload" style="flex:1; background:var(--paper);">
+            📷 Snap / Upload Picture
+          </label>
+          <button type="button" id="scanDecodeFileBtn" class="primary" style="display:none;">
+            Decode File
+          </button>
+        </div>
+        <img id="scanFilePreview" class="file-preview-thumb" alt="Preview">
+      </div>
+
+      <div class="status-line" id="scanStatus">Tap "Start Camera" to initialize live detection.</div>
+
+      <div class="decoded-box" id="scanDecodedBox" style="display:none;">
+        <h4>Scanned GS1 Code</h4>
+        <div class="raw" id="scanRaw"></div>
+        <div class="parsed-grid" id="scanParsedGrid"></div>
+        <button class="primary" id="scanApplyBtn" style="width:100%; margin-top:12px;">Auto-Fill Form →</button>
+      </div>
+    </div>
+
+    <!-- TAB 2: OCR -->
+    <div class="tabpane" id="tab-ocr">
+      <div class="camera-wrap" style="max-height:25vh;">
+        <video id="ocrVideo" playsinline autoplay muted></video>
+      </div>
+      <canvas id="ocrCanvas" style="display:none;"></canvas>
+
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <select id="ocrCameraSelect" style="flex:1;"></select>
+        <button id="ocrCaptureBtn" class="primary" style="flex:1;">Capture Photo</button>
+      </div>
+
+      <div class="upload-card">
+        <span style="font-size:12px; font-weight:600; color:var(--ink-soft);">Or pick from file:</span>
+        <input type="file" id="ocrFileInput" class="file-input-hidden" accept="image/*" capture="environment">
+        <label for="ocrFileInput" class="btn-upload">📁 Choose File</label>
+      </div>
+
+      <div class="status-line" id="ocrStatus">Capture or upload photo to recognize text.</div>
+
+      <div class="decoded-box" id="ocrResultBox" style="display:none;">
+        <h4>Highlight text to assign to field</h4>
+        <textarea id="ocrText" rows="4"></textarea>
+        <div class="field-assign-row" id="ocrAssignRow"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORM & INVENTORY PANEL -->
+  <section class="panel right">
+    <h3 class="section-title">Item details</h3>
+    <form id="itemForm">
+      <div class="form-grid">
+        <div class="field"><label>Product Name</label><input type="text" id="f_productName"></div>
+        <div class="field"><label>GTIN (01)</label><input type="text" id="f_gtin"></div>
+        <div class="field"><label>Batch / Lot (10)</label><input type="text" id="f_batchNo"></div>
+        <div class="field"><label>Expiry Date (17)</label><input type="text" id="f_expiry" placeholder="DD/MM/YYYY"></div>
+        <div class="field"><label>Manufacturer</label><input type="text" id="f_manufacturer"></div>
+        <div class="field"><label>Carton Size</label><input type="text" id="f_cartonSize"></div>
+        <div class="field"><label>Pack Size</label><input type="text" id="f_packSize"></div>
+        <div class="field"><label>Strip Qty</label><input type="text" id="f_stripQty"></div>
+        <div class="field"><label>Strip Size</label><input type="text" id="f_stripSize"></div>
+        <div class="field"><label>HMC Identifier (Charge No.)</label><input type="text" id="f_hmcId"></div>
+        <div class="field"><label>Location Row (AA-ZZ)</label><input type="text" id="f_locRow" placeholder="AA" maxlength="2" style="text-transform:uppercase;"></div>
+        <div class="field"><label>Location Bin (1-999)</label><input type="number" id="f_locBin" placeholder="101" min="1" max="999"></div>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;">
+        <button type="submit" class="primary" id="addItemBtn" style="flex:1;">Add item to list</button>
+        <button type="button" class="ghost" id="clearFormBtn">Clear form</button>
+      </div>
+      <span class="helptext" id="editingNote" style="display:none; margin-top:6px; color:var(--amber);">Editing row — saving updates in place.</span>
+      <div class="helptext" id="masterHint" style="margin-top:6px;"></div>
+    </form>
+
+    <h3 class="section-title">
+      Known products
+      <button type="button" class="ghost small" id="toggleMasterBtn" style="float:right;"><span id="toggleMasterLabel">Show</span> (<span id="masterCount">0</span>)</button>
+    </h3>
+    <div class="table-scroll" id="masterPanel" style="display:none; margin-bottom:12px;">
+      <table>
+        <thead>
+          <tr><th>GTIN</th><th>Product name</th><th>Manufacturer</th><th>Carton</th><th>Pack</th><th>Strip qty</th><th>Strip size</th><th>Row</th><th>Bin</th><th></th></tr>
+        </thead>
+        <tbody id="masterTbody"></tbody>
+      </table>
+    </div>
+
+    <h3 class="section-title">Captured inventory</h3>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+      <span class="count-pill"><span id="rowCount">0</span> items</span>
+      <div>
+        <button class="small" id="exportBtn">Export Excel</button>
+        <button class="small danger" id="clearAllBtn">Clear all</button>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th></th><th>Product name</th><th>GTIN</th><th>Batch</th><th>Expiry</th>
+            <th>Manufacturer</th><th>Carton</th><th>Pack</th><th>Strip qty</th><th>Strip size</th>
+            <th>HMC id.</th><th>Row</th><th>Bin</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="itemsTbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  var FIELDS = [
+    { key:"productName", label:"Product Name" },
+    { key:"gtin",         label:"GTIN" },
+    { key:"batchNo",      label:"Batch No" },
+    { key:"expiry",       label:"Expiry" },
+    { key:"manufacturer", label:"Manufacturer" },
+    { key:"cartonSize",   label:"Carton Size" },
+    { key:"packSize",     label:"Pack Size" },
+    { key:"stripQty",     label:"Strip Qty" },
+    { key:"stripSize",    label:"Strip Size" },
+    { key:"hmcId",        label:"HMC Identifier (Charge No)" },
+    { key:"locRow",       label:"Location Row (AA-ZZ)" },
+    { key:"locBin",       label:"Location Bin (1-999)" }
+  ];
+
+  var STORAGE_KEY = "batchline_items_v2";
+  var MASTER_KEY = "batchline_product_master_v2";
+  var MASTER_FIELD_KEYS = ["productName","manufacturer","cartonSize","packSize","stripQty","stripSize","locRow","locBin"];
+
+  var items = loadItems();
+  var productMaster = loadMaster();
+  var editingId = null;
+  
+  var zxingReader = null;
+  var scanControls = null;
+  var liveStream = null;
+  var nativeDetector = null;
+  var nativeScanInterval = null;
+  var ocrStream = null;
+  var selectedFile = null;
+  var currentParsedGS1 = null;
+
+  function $(id){ return document.getElementById(id); }
+  function uid(){ return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  /* Ensure HTTPS */
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    setStatus('scanStatus', 'Camera access requires HTTPS connection. Please host via HTTPS.', 'err');
+  }
+
+  $('f_locRow').addEventListener('input', function(){
+    this.value = this.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 2);
+  });
+
+  $('f_locBin').addEventListener('input', function(){
+    if(this.value < 1) this.value = "";
+    if(this.value > 999) this.value = 999;
+  });
+
+  function validateLocationFields(){
+    var row = $('f_locRow').value.trim();
+    var bin = $('f_locBin').value.trim();
+    if(row && !/^[A-Z]{2}$/.test(row)){ alert("Location Row must be 2 letters from AA to ZZ."); return false; }
+    if(bin && (parseInt(bin, 10) < 1 || parseInt(bin, 10) > 999)){ alert("Location Bin must be between 1 and 999."); return false; }
+    return true;
+  }
+
+  function loadItems(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }catch(e){ return []; } }
+  function saveItems(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }catch(e){} }
+  function loadMaster(){ try{ return JSON.parse(localStorage.getItem(MASTER_KEY)) || {}; }catch(e){ return {}; } }
+  function saveMaster(){ try{ localStorage.setItem(MASTER_KEY, JSON.stringify(productMaster)); }catch(e){} }
+
+  function autofillFromMaster(gtin){
+    if(!gtin) return;
+    var entry = productMaster[gtin];
+    if(!entry){ $('masterHint').textContent = ''; return; }
+    MASTER_FIELD_KEYS.forEach(function(k){ if(entry[k]) $('f_' + k).value = entry[k]; });
+    $('masterHint').textContent = 'Autofilled from product master database.';
+  }
+
+  function upsertMaster(gtin, values){
+    if(!gtin) return;
+    var hasAny = MASTER_FIELD_KEYS.some(function(k){ return values[k]; });
+    if(!hasAny) return;
+    var entry = productMaster[gtin] || {};
+    MASTER_FIELD_KEYS.forEach(function(k){ if(values[k]) entry[k] = values[k]; });
+    productMaster[gtin] = entry;
+    saveMaster();
+    renderMasterTable();
+  }
+
+  /* GS1 DataMatrix Parsing */
+  function parseGS1DataMatrix(raw){
+    if(!raw) return null;
+    var clean = raw.replace(/^\][A-Za-z0-9]{2}/, "").trim();
+    var parsed = {};
+    var GS = String.fromCharCode(29);
+
+    if(/^\(\d{2,4}\)/.test(clean)){
+      var re = /\((\d{2,4})\)([^\(]*)/g, m;
+      while((m = re.exec(clean)) !== null){ parsed[m[1]] = m[2].trim(); }
+      return Object.keys(parsed).length ? parsed : null;
+    }
+
+    var i = 0, safety = 0;
+    while(i < clean.length && safety < 30){
+      safety++;
+      if(clean.charAt(i) === GS){ i++; continue; }
+      var ai2 = clean.substr(i, 2);
+      if(ai2 === "01" || ai2 === "02"){ parsed[ai2] = clean.substr(i + 2, 14); i += 16; }
+      else if(ai2 === "17" || ai2 === "15" || ai2 === "11"){ parsed[ai2] = clean.substr(i + 2, 6); i += 8; }
+      else if(ai2 === "10" || ai2 === "21"){
+        var start = i + 2, gsIdx = clean.indexOf(GS, start);
+        if(gsIdx === -1){ parsed[ai2] = clean.substr(start); i = clean.length; }
+        else { parsed[ai2] = clean.substring(start, gsIdx); i = gsIdx + 1; }
+      } else { break; }
+    }
+    if(Object.keys(parsed).length) return parsed;
+    if(/^\d{8,14}$/.test(clean)) return { "01": clean };
+    return null;
+  }
+
+  function formatGS1Date(yymmdd){
+    if(!/^\d{6}$/.test(yymmdd)) return yymmdd;
+    var yy = parseInt(yymmdd.substr(0,2),10), mm = yymmdd.substr(2,2), dd = yymmdd.substr(4,2);
+    return dd + "/" + mm + "/" + (yy <= 50 ? 2000 : 1900) + yy;
+  }
+
+  function renderParsedGS1(parsed){
+    var grid = $('scanParsedGrid');
+    if(!parsed){ grid.innerHTML = '<span class="lbl">Type:</span><span class="val">Standard Non-GS1 Barcode</span>'; return; }
+    var html = '';
+    if(parsed["01"]) html += '<span class="lbl">GTIN (01):</span><span class="val">' + parsed["01"] + '</span>';
+    if(parsed["10"]) html += '<span class="lbl">Batch (10):</span><span class="val">' + parsed["10"] + '</span>';
+    if(parsed["17"]) html += '<span class="lbl">Expiry (17):</span><span class="val">' + formatGS1Date(parsed["17"]) + '</span>';
+    grid.innerHTML = html;
+  }
+
+  function setStatus(id, msg, type){ var el = $(id); el.textContent = msg; el.className = 'status-line' + (type ? ' ' + type : ''); }
+
+  function listCameras(selectEl){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    navigator.mediaDevices.enumerateDevices().then(function(devices){
+      var cams = devices.filter(function(d){ return d.kind === 'videoinput'; });
+      selectEl.innerHTML = "";
+      cams.forEach(function(c, i){
+        var opt = document.createElement('option');
+        opt.value = c.deviceId; opt.textContent = c.label || ('Camera ' + (i + 1));
+        selectEl.appendChild(opt);
+      });
+      var backCam = cams.find(function(c){ return /back|rear|environment/i.test(c.label); });
+      if(backCam) selectEl.value = backCam.deviceId;
+    }).catch(function(e){ console.error(e); });
+  }
+
+  /* Real-Time Mobile Barcode Scanner */
+  async function startScan(){
+    stopScan();
+    setStatus('scanStatus', 'Initializing high-resolution camera stream...');
+
+    var deviceId = $('scanCameraSelect').value;
+    
+    // Request 1080p resolution to ensure crisp rendering of small DataMatrix codes
+    var constraints = {
+      video: {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        facingMode: { ideal: "environment" }
+      }
+    };
+    if (deviceId) { constraints.video.deviceId = { exact: deviceId }; }
+
+    try {
+      liveStream = await navigator.mediaDevices.getUserMedia(constraints);
+      var videoEl = $('scanVideo');
+      videoEl.srcObject = liveStream;
+      await videoEl.play();
+
+      // Request continuous focus track if supported by phone hardware
+      var track = liveStream.getVideoTracks()[0];
+      if (track && track.getCapabilities) {
+        var capabilities = track.getCapabilities();
+        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+          try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch(e){}
+        }
+      }
+
+      $('scanStartBtn').disabled = true; 
+      $('scanStopBtn').disabled = false;
+      $('scanReticle').classList.add('live');
+      listCameras($('scanCameraSelect'));
+
+      // Check for native hardware-accelerated BarcodeDetector (iOS 17+ Safari & Android Chrome)
+      if ('BarcodeDetector' in window) {
+        try {
+          var supportedFormats = await BarcodeDetector.getSupportedFormats();
+          if (supportedFormats.includes('data_matrix')) {
+            nativeDetector = new BarcodeDetector({ formats: ['data_matrix', 'qr_code', 'code_128', 'ean_13'] });
+            setStatus('scanStatus', 'Native Mobile Hardware Scanner Active.', 'ok');
+            startNativeScanLoop(videoEl);
+            return;
+          }
+        } catch(e) {}
+      }
+
+      // Fallback: ZXing Software Engine Stream
+      if (window.ZXing) {
+        zxingReader = new ZXing.BrowserMultiFormatReader();
+        zxingReader.decodeFromStream(liveStream, 'scanVideo', function(result, err){
+          if(result) handleScanResult(result.getText());
+        }).then(function(controls){
+          scanControls = controls;
+          setStatus('scanStatus', 'ZXing Stream Scanner Active.', 'ok');
+        }).catch(function(err){
+          setStatus('scanStatus', 'Stream decode error: ' + err.message, 'err');
+        });
+      }
+
+    } catch(err) {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setStatus('scanStatus', 'Camera blocked. Please enable camera permissions or upload photo.', 'err');
+      } else {
+        setStatus('scanStatus', 'Failed to open camera: ' + err.message, 'err');
+      }
+    }
+  }
+
+  function startNativeScanLoop(videoEl) {
+    nativeScanInterval = setInterval(async function(){
+      if (!nativeDetector || videoEl.readyState < 2) return;
+      try {
+        var barcodes = await nativeDetector.detect(videoEl);
+        if (barcodes.length > 0) {
+          handleScanResult(barcodes[0].rawValue);
+        }
+      } catch(e) {}
+    }, 150); // Scan frame 6-7 times per second
+  }
+
+  function stopScan(){
+    if (nativeScanInterval) { clearInterval(nativeScanInterval); nativeScanInterval = null; }
+    if (scanControls) { try{ scanControls.stop(); }catch(e){} scanControls = null; }
+    if (zxingReader) { try{ zxingReader.reset(); }catch(e){} zxingReader = null; }
+    if (liveStream) {
+      liveStream.getTracks().forEach(function(track){ track.stop(); });
+      liveStream = null;
+    }
+    $('scanStartBtn').disabled = false; 
+    $('scanStopBtn').disabled = true;
+    $('scanReticle').classList.remove('live');
+  }
+
+  function handleScanResult(rawText){
+    $('scanDecodedBox').style.display = 'block';
+    $('scanRaw').textContent = rawText;
+    currentParsedGS1 = parseGS1DataMatrix(rawText);
+    renderParsedGS1(currentParsedGS1);
+    setStatus('scanStatus', 'DataMatrix code scanned!', 'ok');
+    if(navigator.vibrate) navigator.vibrate(80);
+  }
+
+  /* File Selection and Photo Multi-Pass Decoder */
+  $('scanFileInput').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    selectedFile = file;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var img = $('scanFilePreview');
+      img.src = ev.target.result;
+      img.style.display = 'block';
+      $('scanDecodeFileBtn').style.display = 'inline-flex';
+      setStatus('scanStatus', 'Photo selected. Tap "Decode File".', 'ok');
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function tryDecodeCanvas(canvasElement) {
+    try {
+      var ctx = canvasElement.getContext('2d');
+      var imgData = ctx.getImageData(0, 0, canvasElement.width, canvasElement.height);
+      var luminanceSource = new ZXing.RGBLuminanceSource(imgData.data, canvasElement.width, canvasElement.height);
+      var binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+      var multiReader = new ZXing.MultiFormatReader();
+      var result = multiReader.decode(binaryBitmap);
+      return result ? result.getText() : null;
+    } catch(err) {
+      return null;
+    }
+  }
+
+  $('scanDecodeFileBtn').addEventListener('click', function(){
+    if(!selectedFile) return;
+    setStatus('scanStatus', 'Processing photo orientation and downscaling...');
+
+    var img = new Image();
+    img.onload = function(){
+      var maxDim = 1200;
+      var w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+        else { w = Math.round((w * maxDim) / h); h = maxDim; }
+      }
+
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+
+      var decodedText = tryDecodeCanvas(canvas);
+      if(decodedText) { handleScanResult(decodedText); return; }
+
+      var angles = [90, 180, 270];
+      for(var a = 0; a < angles.length; a++){
+        var angle = angles[a];
+        var rotCanvas = document.createElement('canvas');
+        var rotCtx = rotCanvas.getContext('2d');
+
+        if(angle === 180) {
+          rotCanvas.width = w; rotCanvas.height = h;
+          rotCtx.translate(w / 2, h / 2);
+        } else {
+          rotCanvas.width = h; rotCanvas.height = w;
+          rotCtx.translate(h / 2, w / 2);
+        }
+
+        rotCtx.rotate((angle * Math.PI) / 180);
+        rotCtx.drawImage(canvas, -w / 2, -h / 2);
+
+        decodedText = tryDecodeCanvas(rotCanvas);
+        if(decodedText) { handleScanResult(decodedText); return; }
+      }
+
+      setStatus('scanStatus', 'No DataMatrix code detected. Ensure good lighting and crisp focus.', 'err');
+    };
+    img.src = URL.createObjectURL(selectedFile);
+  });
+
+  $('scanApplyBtn').addEventListener('click', function(){
+    if(currentParsedGS1){
+      if(currentParsedGS1["01"]) $('f_gtin').value = currentParsedGS1["01"];
+      if(currentParsedGS1["10"]) $('f_batchNo').value = currentParsedGS1["10"];
+      if(currentParsedGS1["17"]) $('f_expiry').value = formatGS1Date(currentParsedGS1["17"]);
+    } else {
+      $('f_gtin').value = $('scanRaw').textContent.trim();
+    }
+    autofillFromMaster($('f_gtin').value);
+  });
+
+  /* OCR Handlers */
+  function startOcrCamera(){
+    var deviceId = $('ocrCameraSelect').value || undefined;
+    var constraints = { video: { facingMode: 'environment' } };
+    if (deviceId) { constraints.video.deviceId = { exact: deviceId }; }
+    navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
+      ocrStream = stream; $('ocrVideo').srcObject = stream;
+      listCameras($('ocrCameraSelect'));
+    }).catch(function(e){ setStatus('ocrStatus', 'OCR camera error: ' + e.message, 'err'); });
+  }
+
+  function stopOcrCamera(){ if(ocrStream){ ocrStream.getTracks().forEach(function(t){ t.stop(); }); ocrStream = null; } }
+
+  $('ocrCaptureBtn').addEventListener('click', function(){
+    var v = $('ocrVideo'); if(!v.videoWidth) return;
+    var canvas = $('ocrCanvas'); canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+    canvas.getContext('2d').drawImage(v, 0, 0);
+    runOcr(canvas.toDataURL('image/png'));
+  });
+
+  $('ocrFileInput').addEventListener('change', function(e){
+    var file = e.target.files[0]; if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){ runOcr(ev.target.result); };
+    reader.readAsDataURL(file);
+  });
+
+  function runOcr(dataUrl){
+    if(!window.Tesseract){ setStatus('ocrStatus', 'OCR engine missing.', 'err'); return; }
+    setStatus('ocrStatus', 'Recognizing text...');
+    Tesseract.recognize(dataUrl, 'eng').then(function(res){
+      $('ocrResultBox').style.display = 'block';
+      $('ocrText').value = res.data.text.trim();
+      setStatus('ocrStatus', 'Text parsed. Highlight text to assign fields.', 'ok');
+    }).catch(function(err){ setStatus('ocrStatus', 'OCR Error: ' + err.message, 'err'); });
+  }
+
+  (function buildOcrButtons(){
+    var row = $('ocrAssignRow');
+    FIELDS.forEach(function(f){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'small'; b.textContent = '→ ' + f.label;
+      b.addEventListener('click', function(){
+        var ta = $('ocrText'), selected = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
+        if(selected) $('f_' + f.key).value = selected;
+      });
+      row.appendChild(b);
+    });
+  })();
+
+  /* Form & Table Functions */
+  function getFormValues(){
+    var v = {}; FIELDS.forEach(function(f){ v[f.key] = $('f_' + f.key).value.trim(); }); return v;
+  }
+  function setFormValues(v){
+    FIELDS.forEach(function(f){ $('f_' + f.key).value = v[f.key] || ""; });
+  }
+  function clearForm(){
+    setFormValues({}); editingId = null;
+    $('editingNote').style.display = 'none'; $('addItemBtn').textContent = 'Add item to list'; $('masterHint').textContent = '';
+  }
+
+  $('f_gtin').addEventListener('change', function(){ autofillFromMaster(this.value.trim()); });
+  $('clearFormBtn').addEventListener('click', clearForm);
+
+  $('itemForm').addEventListener('submit', function(e){
+    e.preventDefault(); if(!validateLocationFields()) return;
+    var v = getFormValues();
+    if(!v.productName && !v.gtin){ alert('Provide at least a Product Name or GTIN.'); return; }
+
+    if(editingId){
+      var idx = items.findIndex(function(x){ return x.id === editingId; });
+      if(idx !== -1) items[idx] = Object.assign({}, items[idx], v);
+    } else {
+      items.unshift(Object.assign({ id: uid(), dateCaptured: new Date().toISOString() }, v));
+    }
+    if(v.gtin) upsertMaster(v.gtin, v);
+    saveItems(); renderTable(); clearForm();
+  });
+
+  function renderTable(){
+    var tbody = $('itemsTbody'); tbody.innerHTML = "";
+    $('rowCount').textContent = items.length; $('statCount').textContent = items.length;
+    $('statLast').textContent = items.length ? timeAgo(items[0].dateCaptured) : '—';
+
+    items.forEach(function(it){
+      var tr = document.createElement('tr');
+      var flag = expiryFlagClass(it.expiry);
+      tr.innerHTML =
+        '<td>' + (flag ? '<span class="expiry-flag ' + flag + '"></span>' : '') + '</td>' +
+        '<td>' + escapeHtml(it.productName) + '</td>' +
+        '<td>' + escapeHtml(it.gtin) + '</td>' +
+        '<td>' + escapeHtml(it.batchNo) + '</td>' +
+        '<td>' + escapeHtml(it.expiry) + '</td>' +
+        '<td>' + escapeHtml(it.manufacturer) + '</td>' +
+        '<td>' + escapeHtml(it.cartonSize) + '</td>' +
+        '<td>' + escapeHtml(it.packSize) + '</td>' +
+        '<td>' + escapeHtml(it.stripQty) + '</td>' +
+        '<td>' + escapeHtml(it.stripSize) + '</td>' +
+        '<td>' + escapeHtml(it.hmcId) + '</td>' +
+        '<td>' + escapeHtml(it.locRow) + '</td>' +
+        '<td>' + escapeHtml(it.locBin) + '</td>' +
+        '<td></td>';
+      var actionTd = tr.lastElementChild;
+      var editBtn = document.createElement('button'); editBtn.className = 'ghost small'; editBtn.textContent = 'Edit';
+      editBtn.addEventListener('click', function(){
+        setFormValues(it); editingId = it.id;
+        $('editingNote').style.display = 'inline'; $('addItemBtn').textContent = 'Save changes';
+        window.scrollTo({top:0, behavior:'smooth'});
+      });
+      var delBtn = document.createElement('button'); delBtn.className = 'ghost small'; delBtn.textContent = 'Delete'; delBtn.style.color = 'var(--bad)';
+      delBtn.addEventListener('click', function(){
+        if(confirm('Delete entry?')){ items = items.filter(function(x){ return x.id !== it.id; }); saveItems(); renderTable(); }
+      });
+      actionTd.appendChild(editBtn); actionTd.appendChild(delBtn);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderMasterTable(){
+    var gtins = Object.keys(productMaster); $('masterCount').textContent = gtins.length;
+    var tbody = $('masterTbody'); tbody.innerHTML = "";
+    gtins.forEach(function(g){
+      var e = productMaster[g]; var tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+escapeHtml(g)+'</td><td>'+escapeHtml(e.productName)+'</td><td>'+escapeHtml(e.manufacturer)+'</td><td>'+escapeHtml(e.cartonSize)+'</td><td>'+escapeHtml(e.packSize)+'</td><td>'+escapeHtml(e.stripQty)+'</td><td>'+escapeHtml(e.stripSize)+'</td><td>'+escapeHtml(e.locRow)+'</td><td>'+escapeHtml(e.locBin)+'</td><td></td>';
+      var actionTd = tr.lastElementChild;
+      var delBtn = document.createElement('button'); delBtn.className = 'ghost small'; delBtn.textContent = 'Delete'; delBtn.style.color = 'var(--bad)';
+      delBtn.addEventListener('click', function(){ delete productMaster[g]; saveMaster(); renderMasterTable(); });
+      actionTd.appendChild(delBtn); tbody.appendChild(tr);
+    });
+  }
+
+  $('toggleMasterBtn').addEventListener('click', function(){
+    var p = $('masterPanel'), showing = p.style.display !== 'none';
+    p.style.display = showing ? 'none' : 'block'; $('toggleMasterLabel').textContent = showing ? 'Show' : 'Hide';
+  });
+
+  function expiryFlagClass(expiry){
+    if(!expiry) return null;
+    var m = expiry.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if(!m) return null;
+    var d = new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
+    var days = (d - new Date()) / 86400000;
+    if(days < 0) return 'expired'; if(days < 90) return 'soon'; return 'ok';
+  }
+
+  function timeAgo(iso){
+    var s = Math.floor((Date.now() - new Date(iso).getTime())/1000);
+    if(s < 60) return 'just now'; if(s < 3600) return Math.floor(s/60) + 'm ago';
+    if(s < 86400) return Math.floor(s/3600) + 'h ago'; return Math.floor(s/86400) + 'd ago';
+  }
+
+  function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  /* Excel Export Engine */
+  $('exportBtn').addEventListener('click', function(){
+    if(!items.length){ alert('List is empty.'); return; }
+    var headers = FIELDS.map(function(f){ return f.label; }).concat(["Date Captured"]);
+    var rows = items.map(function(it){
+      var r = {}; FIELDS.forEach(function(f){ r[f.label] = it[f.key] || ""; });
+      r["Date Captured"] = it.dateCaptured ? new Date(it.dateCaptured).toLocaleString() : "";
+      return r;
+    });
+    var ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Stock Intake");
+    XLSX.writeFile(wb, "Pharmacy_Stock_" + new Date().toISOString().slice(0,10) + ".xlsx");
+  });
+
+  $('clearAllBtn').addEventListener('click', function(){
+    if(items.length && confirm('Clear all entries?')){ items = []; saveItems(); renderTable(); }
+  });
+
+  /* Tab Navigation */
+  document.querySelectorAll('.tab-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      document.querySelectorAll('.tabpane').forEach(function(p){ p.classList.remove('active'); });
+      btn.classList.add('active'); $('tab-' + btn.dataset.tab).classList.add('active');
+      if(btn.dataset.tab === 'ocr') { stopScan(); startOcrCamera(); }
+      else { stopOcrCamera(); }
+    });
+  });
+
+  $('scanStartBtn').addEventListener('click', startScan);
+  $('scanStopBtn').addEventListener('click', stopScan);
+
+  document.addEventListener('DOMContentLoaded', function(){
+    renderTable(); renderMasterTable();
+    if(navigator.mediaDevices) { listCameras($('scanCameraSelect')); listCameras($('ocrCameraSelect')); }
+  });
+})();
+</script>
+</body>
+</html>
